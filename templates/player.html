@@ -3,70 +3,131 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="referrer" content="no-referrer">
-    <title>正在播放</title>
+    <title>正在播放 - {{ video.title }}</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.0/dist/hls.min.js"></script>
     <style>
-        body { margin: 0; background: #000; color: #e0e0e0; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
+        /* === 1. 基础布局与毛玻璃 === */
+        body { margin: 0; background: #000; color: #e0e0e0; font-family: -apple-system, sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         
-        /* 导航精简 */
-        .navbar { height: 50px; padding: 0 15px; background: #1a1a1a; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
-        .logo { font-weight: bold; color: #ff3b30; font-size: 16px; text-decoration: none; }
-        .back-link { color: #888; text-decoration: none; font-size: 14px; padding: 10px; }
+        .navbar { 
+            height: 50px; padding: 0 20px; 
+            background: rgba(20, 20, 20, 0.8); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; z-index: 10;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .logo { font-weight: 900; background: linear-gradient(45deg, #ff3b30, #ff9f0a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-decoration: none; font-style: italic;}
+        .back-link { color: #aaa; text-decoration: none; font-size: 14px; padding: 5px 10px; border-radius: 15px; transition: background 0.3s; }
+        .back-link:hover { background: rgba(255,255,255,0.1); color: white; }
 
-        /* 布局：手机上是上下结构，电脑是左右结构 */
-        .main-container { display: flex; flex: 1; flex-direction: column; overflow: hidden; }
+        .main-container { display: flex; flex: 1; flex-direction: column; overflow: hidden; position: relative; }
         @media (min-width: 800px) { .main-container { flex-direction: row; } }
 
-        /* 播放器区域 */
-        .player-section { flex-shrink: 0; width: 100%; background: #000; position: relative; }
-        /* 保持16:9 */
-        .video-ratio-box { width: 100%; padding-top: 56.25%; position: relative; }
-        .video-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-        video, iframe { width: 100%; height: 100%; border: none; outline: none; }
+        /* === 2. 播放器区域 === */
+        .player-section { flex-shrink: 0; width: 100%; background: #000; position: relative; display: flex; flex-direction: column; }
+        @media (min-width: 800px) { .player-section { flex: 3; height: 100%; justify-content: center; } }
+
+        .video-ratio-box { width: 100%; padding-top: 56.25%; position: relative; background: #000; }
+        @media (min-width: 800px) { .video-ratio-box { padding-top: 0; height: 100%; } }
         
-        /* 电脑版让播放器撑满剩余空间，不用固定比例 */
-        @media (min-width: 800px) {
-            .player-section { flex: 3; height: 100%; }
-            .video-ratio-box { height: 100%; padding-top: 0; }
-        }
+        .video-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; }
+        
+        video, iframe { width: 100%; height: 100%; border: none; outline: none; object-fit: contain; }
 
-        /* 选集区域 */
+        /* === 3. 手势反馈层 === */
+        /* 覆盖在视频上方的透明层，用于捕获手势（如果视频本身拦截了事件）和显示反馈 */
+        #gestureFeedback {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(5px);
+            padding: 15px 25px; border-radius: 10px;
+            color: white; font-size: 16px; font-weight: bold;
+            display: none; pointer-events: none; z-index: 20;
+            text-align: center; border: 1px solid rgba(255,255,255,0.1);
+        }
+        #gestureFeedback .icon { font-size: 24px; display: block; margin-bottom: 5px; }
+
+        /* === 4. 快捷控制条 (上一集/下一集) === */
+        .control-bar {
+            height: 40px; background: #111; display: flex; align-items: center; justify-content: space-between; padding: 0 15px;
+            border-bottom: 1px solid #222;
+        }
+        .control-btn {
+            background: #222; color: #ccc; border: none; padding: 5px 15px; border-radius: 4px; 
+            font-size: 13px; cursor: pointer; text-decoration: none; display: flex; align-items: center;
+        }
+        .control-btn:hover { background: #333; color: white; }
+        .control-btn.disabled { opacity: 0.3; pointer-events: none; }
+        .ep-info-text { font-size: 12px; color: #666; }
+
+        /* === 5. 侧边栏 (玻璃拟态) === */
         .sidebar { 
-            flex: 1; background: #111; display: flex; flex-direction: column; overflow: hidden; 
-            border-top: 1px solid #222; 
+            flex: 1; 
+            background: #111; /* 降级背景 */
+            display: flex; flex-direction: column; overflow: hidden; 
         }
-        @media (min-width: 800px) { .sidebar { border-top: none; border-left: 1px solid #333; max-width: 350px; } }
+        /* 电脑端启用侧边栏毛玻璃 */
+        @media (min-width: 800px) { 
+            .sidebar { 
+                border-left: 1px solid rgba(255,255,255,0.1); max-width: 350px; 
+                background: rgba(20, 20, 20, 0.95);
+            } 
+        }
 
-        .info-box { padding: 15px; border-bottom: 1px solid #222; flex-shrink: 0; }
-        .title { font-size: 16px; color: white; margin-bottom: 8px; font-weight: bold; }
-        .desc { font-size: 12px; color: #666; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .info-box { padding: 20px; border-bottom: 1px solid #222; }
+        .title { font-size: 18px; color: white; margin-bottom: 10px; font-weight: bold; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        .desc { font-size: 13px; color: #888; line-height: 1.5; max-height: 60px; overflow-y: auto; }
         
         .episodes-box { flex: 1; padding: 15px; overflow-y: auto; }
-        .ep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(55px, 1fr)); gap: 8px; }
-        .ep-btn { 
-            display: block; text-align: center; padding: 10px 0; 
-            background: #252525; color: #bbb; text-decoration: none; 
-            border-radius: 4px; font-size: 13px; 
-        }
-        .ep-btn.active { background: #ff3b30; color: white; font-weight: bold; }
+        .ep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 10px; }
         
-        .toast { position: absolute; top: 10%; left: 50%; transform: translateX(-50%); background: rgba(40, 167, 69, 0.9); color: white; padding: 8px 15px; border-radius: 20px; font-size: 12px; display: none; z-index: 99; pointer-events: none; }
+        .ep-btn { 
+            display: flex; align-items: center; justify-content: center; height: 36px;
+            background: rgba(255,255,255,0.05); color: #bbb; text-decoration: none; 
+            border-radius: 6px; font-size: 13px; transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+        .ep-btn:hover { background: rgba(255,255,255,0.1); color: white; }
+        .ep-btn.active { 
+            background: linear-gradient(135deg, #ff3b30, #ff9f0a); 
+            color: white; font-weight: bold; border: none;
+            box-shadow: 0 4px 10px rgba(255, 59, 48, 0.3);
+        }
+        
+        /* 恢复进度提示 */
+        .toast { position: absolute; top: 10%; left: 50%; transform: translateX(-50%); background: rgba(16, 185, 129, 0.9); color: white; padding: 8px 20px; border-radius: 30px; font-size: 13px; display: none; z-index: 99; pointer-events: none; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
     </style>
 </head>
 <body>
     <div class="navbar">
-        <a href="/" class="logo">MY FLIX</a>
-        <a href="/" class="back-link">返回</a>
+        <a href="/" class="logo">MY FLIX PRO</a>
+        <a href="/" class="back-link">← 返回首页</a>
     </div>
 
     <div class="main-container">
         <div class="player-section">
-            <div id="resumeToast" class="toast">🚀 已恢复进度</div>
+            <div id="resumeToast" class="toast">🚀 已为您恢复播放进度</div>
+            <div id="gestureFeedback"><span class="icon">🔊</span><span class="text">50%</span></div>
+            
             <div class="video-ratio-box">
                 <div class="video-container" id="playerContainer">
-                    <video id="videoPlayer" controls autoplay playsinline webkit-playsinline></video>
-                </div>
+                    </div>
+            </div>
+            
+            <div class="control-bar">
+                {% set prev_index = current_index - 1 %}
+                {% if prev_index >= 0 %}
+                <a href="/play?id={{ video.id }}&ep_index={{ prev_index }}&api={{ current_api }}" class="control-btn">⏮ 上一集</a>
+                {% else %}
+                <span class="control-btn disabled">⏮ 上一集</span>
+                {% endif %}
+
+                <span class="ep-info-text">正在播放: {{ current_ep.name }}</span>
+
+                {% set next_index = current_index + 1 %}
+                {% if next_index < video.episodes|length %}
+                <a href="/play?id={{ video.id }}&ep_index={{ next_index }}&api={{ current_api }}" class="control-btn">下一集 ⏭</a>
+                {% else %}
+                <span class="control-btn disabled">下一集 ⏭</span>
+                {% endif %}
             </div>
         </div>
         
@@ -76,7 +137,10 @@
                 <div class="desc">{{ video.desc }}</div>
             </div>
             <div class="episodes-box">
-                <div style="margin-bottom:10px;color:#888;font-size:12px">选集 ({{ current_ep.name }})</div>
+                <div style="margin-bottom:12px;color:#888;font-size:12px;display:flex;justify-content:space-between;">
+                    <span>选集列表</span>
+                    <span>共 {{ video.episodes|length }} 集</span>
+                </div>
                 <div class="ep-grid">
                     {% for ep in video.episodes %}
                     <a href="/play?id={{ video.id }}&ep_index={{ ep.index }}&api={{ current_api }}" 
@@ -90,33 +154,48 @@
     </div>
     
     <script>
-        // ... 请保留你之前那个完美的 JS 逻辑 ...
-        // ... 唯一需要注意的是，video标签我加了 playsinline 属性，防止iOS自动全屏遮挡 ...
         var container = document.getElementById('playerContainer');
         var videoSrc = "{{ current_ep.url }}"; 
         var vodId = "{{ video.id }}";
         var epIndex = "{{ current_index }}";
         var currentApi = "{{ current_api }}";
         var storageKey = "progress_" + vodId + "_" + epIndex;
+        var videoElement = null; // 全局引用
 
         function initPlayer() {
             container.innerHTML = '';
-            if (videoSrc.indexOf('.m3u8') > -1) {
-                var video = document.createElement('video');
-                video.id = 'videoPlayer'; video.controls = true; video.autoplay = true;
-                video.setAttribute('playsinline', ''); video.setAttribute('webkit-playsinline', '');
-                container.appendChild(video); setupHls(video);
-            } else if (videoSrc.indexOf('.mp4') > -1) {
-                var video = document.createElement('video');
-                video.id = 'videoPlayer'; video.controls = true; video.autoplay = true;
-                video.setAttribute('playsinline', '');
-                video.src = videoSrc; container.appendChild(video); setupNative(video);
-            } else {
+            // 判断是否是iframe (无法添加手势)
+            if (videoSrc.indexOf('.m3u8') === -1 && videoSrc.indexOf('.mp4') === -1) {
                 var iframe = document.createElement('iframe');
                 iframe.src = videoSrc; iframe.allow = "autoplay; fullscreen"; iframe.frameBorder = "0";
-                container.appendChild(iframe); saveHistoryToLocal();
+                container.appendChild(iframe); 
+                saveHistoryToLocal();
+                return; // iframe 不支持手势
             }
+
+            // 创建 Video 标签
+            var video = document.createElement('video');
+            video.id = 'videoPlayer'; 
+            video.controls = true; 
+            video.autoplay = true;
+            // iOS 必须属性，防止强制全屏无法操作
+            video.setAttribute('playsinline', ''); 
+            video.setAttribute('webkit-playsinline', '');
+            
+            container.appendChild(video);
+            videoElement = video;
+
+            if (videoSrc.indexOf('.m3u8') > -1) {
+                setupHls(video);
+            } else {
+                video.src = videoSrc; 
+                setupNative(video);
+            }
+
+            // 初始化手势
+            initGestures(container, video);
         }
+
         function setupHls(video) {
             if (Hls.isSupported()) {
                 var hls = new Hls(); hls.loadSource(videoSrc); hls.attachMedia(video);
@@ -124,14 +203,19 @@
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = videoSrc; video.addEventListener('loadedmetadata', function() { loadProgress(video); });
             }
-            video.addEventListener('timeupdate', function() { if (video.currentTime > 0) localStorage.setItem(storageKey, video.currentTime); });
-            video.addEventListener('play', saveHistoryToLocal);
+            bindEvents(video);
         }
+
         function setupNative(video) {
             video.addEventListener('loadedmetadata', function() { loadProgress(video); });
+            bindEvents(video);
+        }
+
+        function bindEvents(video) {
             video.addEventListener('timeupdate', function() { if (video.currentTime > 0) localStorage.setItem(storageKey, video.currentTime); });
             video.addEventListener('play', saveHistoryToLocal);
         }
+
         function loadProgress(video) {
             var lastTime = localStorage.getItem(storageKey);
             if (lastTime && parseFloat(lastTime) > 5) {
@@ -141,6 +225,7 @@
             }
             video.play().catch(e => {});
         }
+
         function saveHistoryToLocal() {
             var historyKey = "history_list";
             var history = JSON.parse(localStorage.getItem(historyKey) || "[]");
@@ -148,9 +233,90 @@
             history.unshift({
                 id: vodId, title: "{{ video.title }}", ep_name: "{{ current_ep.name }}", ep_index: epIndex, pic: "{{ video.pic }}", api: currentApi, time: new Date().toLocaleDateString()
             });
-            if (history.length > 15) history.pop();
+            if (history.length > 20) history.pop();
             localStorage.setItem(historyKey, JSON.stringify(history));
         }
+
+        // === 手势控制逻辑 ===
+        function initGestures(touchArea, video) {
+            let startX, startY;
+            let initialVolume;
+            let initialBrightness = 1.0; // CSS filter brightness default
+            let isTouching = false;
+            let touchType = ''; // 'volume' or 'brightness'
+
+            // 获取当前的 brightness
+            // 注意：因为我们是动态设置filter，所以需要用变量记录
+            let currentBrightness = 1.0;
+
+            touchArea.addEventListener('touchstart', (e) => {
+                startX = e.touches[0].clientX;
+                startY = e.touches[0].clientY;
+                initialVolume = video.volume;
+                isTouching = true;
+                touchType = '';
+            }, {passive: true});
+
+            touchArea.addEventListener('touchmove', (e) => {
+                if (!isTouching) return;
+                
+                let currentX = e.touches[0].clientX;
+                let currentY = e.touches[0].clientY;
+                let deltaY = startY - currentY; // 向上为正
+                let deltaX = currentX - startX;
+
+                // 简单的防误触：如果水平移动大于垂直移动，可能是调整进度（原生控件），忽略
+                if (Math.abs(deltaX) > Math.abs(deltaY)) return;
+
+                // 确定是调整亮度还是音量 (屏幕左半边亮度，右半边音量)
+                let screenWidth = window.innerWidth;
+                if (!touchType) {
+                    if (startX < screenWidth / 2) touchType = 'brightness';
+                    else touchType = 'volume';
+                }
+
+                let percentChange = deltaY / 200; // 灵敏度调节
+
+                if (touchType === 'volume') {
+                    let newVol = initialVolume + percentChange;
+                    if (newVol > 1) newVol = 1;
+                    if (newVol < 0) newVol = 0;
+                    video.volume = newVol;
+                    showFeedback('🔊', Math.round(newVol * 100) + '%');
+                } else if (touchType === 'brightness') {
+                    let newBright = currentBrightness + percentChange;
+                    if (newBright > 2) newBright = 2; // 最大2倍亮度
+                    if (newBright < 0.1) newBright = 0.1; // 最低不全黑
+                    currentBrightness = newBright; // 仅在滑动中临时记录，touchend时不保存，因为下次start重新取
+                    
+                    // 应用滤镜到视频
+                    video.style.filter = `brightness(${newBright})`;
+                    showFeedback('☀', Math.round(newBright * 100) + '%');
+                    
+                    // 注意：touchmove频繁触发，startX/Y应该重置吗？
+                    // 不重置，基于start滑动距离计算比较平滑
+                }
+            }, {passive: false}); // passive: false 允许 preventDefault (如果需要)
+
+            touchArea.addEventListener('touchend', () => {
+                isTouching = false;
+                hideFeedback();
+            });
+        }
+
+        var feedbackTimer;
+        function showFeedback(icon, text) {
+            var box = document.getElementById('gestureFeedback');
+            box.innerHTML = `<span class="icon">${icon}</span><span class="text">${text}</span>`;
+            box.style.display = 'block';
+            clearTimeout(feedbackTimer);
+        }
+        function hideFeedback() {
+            feedbackTimer = setTimeout(() => {
+                document.getElementById('gestureFeedback').style.display = 'none';
+            }, 500);
+        }
+
         initPlayer();
     </script>
 </body>

@@ -5,37 +5,47 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>搜索结果</title>
     <style>
-        body { background: #111; color: #ddd; margin: 0; padding: 15px; font-family: sans-serif; }
-        h2 { text-align: center; font-size: 18px; margin: 10px 0 20px; color: #fff; }
+        body { 
+            background: linear-gradient(-45deg, #141e30, #243b55);
+            min-height: 100vh;
+            color: #ddd; margin: 0; padding: 20px 15px; font-family: -apple-system, sans-serif; 
+        }
+        h2 { text-align: center; font-size: 20px; margin: 10px 0 25px; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
         
-        /* 响应式网格：手机2列，电脑多列 */
         .grid { 
             display: grid; 
-            grid-template-columns: repeat(2, 1fr); /* 强制2列 */
+            grid-template-columns: repeat(2, 1fr); 
             gap: 15px; 
             max-width: 1000px;
             margin: 0 auto;
         }
-        
-        /* 平板和电脑调整为更多列 */
         @media (min-width: 600px) { .grid { grid-template-columns: repeat(3, 1fr); } }
         @media (min-width: 900px) { .grid { grid-template-columns: repeat(5, 1fr); } }
 
         .card { 
-            background: #1e1e1e; border-radius: 8px; overflow: hidden; 
+            background: rgba(30, 30, 30, 0.6); 
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 10px; overflow: hidden; 
             text-decoration: none; color: white; display: flex; flex-direction: column;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transition: transform 0.3s, box-shadow 0.3s;
         }
+        .card:hover { transform: translateY(-5px); box-shadow: 0 8px 25px rgba(0,0,0,0.4); border-color: rgba(255,255,255,0.2); }
+
         .img-box {
-            width: 100%; padding-top: 140%; /* 保持 5:7 比例 */
+            width: 100%; padding-top: 140%; 
             position: relative; background: #000;
         }
         .img-box img {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;
+            transition: transform 0.5s;
         }
-        .info { padding: 8px 10px; }
+        .card:hover .img-box img { transform: scale(1.05); }
+
+        .info { padding: 10px 12px; }
         h3 { font-size: 14px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #eee; }
-        .note { font-size: 12px; color: #666; margin-top: 4px; }
+        .note { font-size: 12px; color: #888; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -54,8 +64,8 @@
         {% endfor %}
     </div>
     {% if not movies %}
-    <div style="text-align:center; margin-top:50px; color: #888; font-size: 14px;">
-        <p>未找到影片，请点击左上角返回切换源</p>
+    <div style="text-align:center; margin-top:50px; color: #aaa; font-size: 15px;">
+        <p>🛸 未找到影片，请点击左上角返回切换源</p>
     </div>
     {% endif %}
 </body>
