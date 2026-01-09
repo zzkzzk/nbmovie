@@ -71,6 +71,13 @@
             border-radius: 40px 0 0 40px;
             cursor: pointer;
         }
+
+        /* 【UI修复】强制下拉选项使用深色背景，防止白色弹窗突兀 */
+        select option {
+            background-color: #1a1a1a;
+            color: #ffffff;
+            padding: 10px;
+        }
         
         input { flex: 1; padding: 0 15px; border: none; background: transparent; color: white; font-size: 16px; outline: none; height: 100%; }
         ::placeholder { color: rgba(255,255,255,0.4); }

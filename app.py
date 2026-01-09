@@ -7,12 +7,18 @@ import os
 import threading
 import csv
 import io
+import pytz  # 引入时区库
 
 app = Flask(__name__)
 
 # ================= 0. 隐形数据统计系统 =================
 DB_FILE = 'site_stats.db'
 ADMIN_IP_FILTER = [] 
+
+# 定义伪装请求头，解决搜索和播放被拦截的问题
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+}
 
 def init_db():
     with sqlite3.connect(DB_FILE) as conn:
@@ -37,7 +43,7 @@ def get_ip_location(ip):
         return "内网/本地"
     try:
         url = f"http://ip-api.com/json/{ip}?lang=zh-CN"
-        resp = requests.get(url, timeout=3)
+        resp = requests.get(url, headers=HEADERS, timeout=3)
         if resp.status_code == 200:
             data = resp.json()
             if data['status'] == 'success':
@@ -48,7 +54,11 @@ def get_ip_location(ip):
 def background_logger(ip, endpoint, user_agent):
     if ip in ADMIN_IP_FILTER: return
     location = get_ip_location(ip)
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # 【修复】强制使用北京时间
+    tz = pytz.timezone('Asia/Shanghai')
+    now = datetime.datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
+    
     try:
         with sqlite3.connect(DB_FILE) as conn:
             c = conn.cursor()
@@ -78,7 +88,8 @@ VALID_SOURCES = []
 def fetch_tvbox_sites(config):
     name_prefix = config['name']
     try:
-        resp = requests.get(config['url'], timeout=3)
+        # 【修复】加入 headers 防止无法获取源配置
+        resp = requests.get(config['url'], headers=HEADERS, timeout=5)
         if resp.status_code == 200:
             data = resp.json()
             if "sites" in data:
@@ -104,20 +115,22 @@ VALID_SOURCES = final_sources
 # ================= 2. 核心业务逻辑 =================
 def search_api(api_url, keyword):
     try:
-        # 【关键修复】这里必须用 ac="list" 才能搜索，之前写成 detail 了
-        resp = requests.get(api_url, params={"ac": "list", "wd": keyword}, timeout=6)
+        # 【修复】加入 headers 和延长超时，防止搜索被拦截或断开
+        resp = requests.get(api_url, params={"ac": "list", "wd": keyword}, headers=HEADERS, timeout=10)
         data = resp.json()
         movies = []
         if data.get("list"):
             for i in data["list"]:
                 movies.append({"id": i["vod_id"], "title": i["vod_name"], "img": i["vod_pic"], "note": i["vod_remarks"], "api": api_url})
         return movies
-    except: return []
+    except Exception as e:
+        print(f"搜索错误 {api_url}: {e}")
+        return []
 
 def get_video_details(api_url, vod_id):
     try:
-        # 获取详情时，必须用 ac="detail"
-        resp = requests.get(api_url, params={"ac": "detail", "ids": vod_id}, timeout=6)
+        # 【修复】加入 headers
+        resp = requests.get(api_url, params={"ac": "detail", "ids": vod_id}, headers=HEADERS, timeout=10)
         data = resp.json()
         if data.get("list"):
             info = data["list"][0]
@@ -194,7 +207,7 @@ def admin_stats():
             <html><head><title>运营后台</title><meta name="viewport" content="width=device-width, initial-scale=1">
             <style>body{{font-family:sans-serif;padding:20px;background:#f5f5f5}} .card{{background:white;padding:15px;margin-bottom:10px;border-radius:8px}}</style>
             </head><body>
-            <h2>📊 数据概览</h2>
+            <h2>📊 数据概览 (北京时间)</h2>
             <div style="display:flex;gap:10px">
                 <div class="card" style="flex:1"><b>总访问(PV)</b><br><span style="font-size:24px;color:#007bff">{total_pv}</span></div>
                 <div class="card" style="flex:1"><b>播放数</b><br><span style="font-size:24px;color:#28a745">{count_play}</span></div>
@@ -206,3 +219,6 @@ def admin_stats():
             """
             return html
     except Exception as e: return f"Error: {e}"
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
