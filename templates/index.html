@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="referrer" content="no-referrer">
+    <title>全能影院 Pro</title>
+    <style>
+        body { margin: 0; padding: 0; color: white; font-family: -apple-system, sans-serif; min-height: 100vh; display: flex; flex-direction: column; align-items: center; background: linear-gradient(-45deg, #0f0c29, #302b63, #24243e, #141e30); background-size: 400% 400%; animation: gradientBG 15s ease infinite; }
+        @keyframes gradientBG { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        .glass-panel { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); }
+        
+        .header-container { margin-top: 10vh; text-align: center; width: 92%; max-width: 600px; z-index: 2; }
+        h1 { font-size: 2.5rem; margin-bottom: 20px; background: linear-gradient(to right, #ff3b30, #ff9f0a, #ff3b30); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        
+        .search-group { display: flex; border-radius: 50px; padding: 5px; height: 50px; align-items: center; transition: transform 0.3s ease; }
+        .search-group:focus-within { transform: scale(1.02); box-shadow: 0 0 25px rgba(255, 59, 48, 0.3); }
+        input { flex: 1; padding: 0 20px; border: none; background: transparent; color: white; font-size: 16px; outline: none; height: 100%; text-align: center; }
+        button { padding: 0 25px; height: 42px; border-radius: 40px; border: none; background: linear-gradient(90deg, #ff3b30, #ff6b6b); color: white; font-weight: bold; font-size: 15px; cursor: pointer; }
+        
+        /* 1. 优化后的词云区 */
+        .random-section { width: 95%; max-width: 800px; margin-top: 50px; text-align: center; z-index: 2; }
+        .random-title { font-size: 1.2rem; color: #ff9f0a; margin-bottom: 25px; font-weight: bold; letter-spacing: 1px; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+        
+        .tag-cloud { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; padding: 10px; }
+        .tag-item { 
+            padding: 12px 24px; 
+            border-radius: 30px; 
+            background: rgba(255,255,255,0.1); 
+            color: #ddd; 
+            font-size: 15px; 
+            font-weight: bold;
+            cursor: pointer; 
+            transition: all 0.3s; 
+            border: 1px solid rgba(255,255,255,0.05);
+            user-select: none;
+            display: flex; align-items: center; gap: 5px;
+        }
+        .tag-item:hover { transform: translateY(-3px) scale(1.05); background: rgba(255,255,255,0.2); color: white; border-color: rgba(255,255,255,0.3); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        
+        /* 特殊标签样式 */
+        .tag-hot { background: linear-gradient(45deg, #ff416c, #ff4b2b); border: none; color: white; }
+        .tag-guess { background: linear-gradient(45deg, #8E2DE2, #4A00E0); border: none; color: white; }
+
+        #randomLoading { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 999; display: none; flex-direction: column; justify-content: center; align-items: center; }
+        .spinner { width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.1); border-top-color: #ff3b30; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 15px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .my-section { width: 95%; max-width: 1000px; margin-top: 40px; display: none; }
+        .section-header { display: flex; justify-content: space-between; padding: 0 10px 5px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 10px; font-size: 14px; color: #ff9f0a; font-weight: bold; }
+        .clear-btn { color: rgba(255,255,255,0.5); font-weight: normal; cursor: pointer; }
+        .history-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        @media (min-width: 600px) { .history-grid { grid-template-columns: repeat(6, 1fr); } }
+        
+        .v-card { text-decoration: none; color: white; display: flex; flex-direction: column; border-radius: 8px; overflow: hidden; }
+        .v-img-box { width: 100%; aspect-ratio: 2/3; position: relative; background: #222; overflow: hidden; margin-bottom: 5px; }
+        .v-img { width: 100%; height: 100%; object-fit: cover; }
+        .v-title { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; color: #ddd; }
+        .v-note { font-size: 10px; color: #888; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="header-container">
+        <h1>MY FLIX V3.0</h1>
+        <form action="/search" method="POST" class="search-group glass-panel">
+            <input type="text" name="keyword" placeholder="搜你想搜...谢谢各位原始股东的支持 ໒・ﻌ・७" required autocomplete="off">
+            <button type="submit">搜索</button>
+        </form>
+    </div>
+
+    <div class="random-section">
+        <div class="random-title">🎲 随便播点啥</div>
+        <div class="tag-cloud">
+            <div class="tag-item tag-hot" onclick="luckyDraw('热门')">🔥 热门榜单</div>
+            <div class="tag-item tag-guess" onclick="guessAndDraw()">💖 猜你喜欢</div>
+            
+            <div class="tag-item" style="color:#ff6b6b" onclick="luckyDraw('电影')">🎬 电影</div>
+            <div class="tag-item" style="color:#4ecdc4" onclick="luckyDraw('电视剧')">📺 电视剧</div>
+            <div class="tag-item" style="color:#ffe66d" onclick="luckyDraw('动漫')">🧸 动漫</div>
+            <div class="tag-item" style="color:#ff9f43" onclick="luckyDraw('综艺')">🎤 综艺</div>
+            <div class="tag-item" style="color:#ff9ff3" onclick="luckyDraw('短剧')">📱 短剧</div>
+        </div>
+    </div>
+
+    <div class="my-section" id="favSection">
+        <div class="section-header"><span>❤️ 我的收藏</span><span class="clear-btn" onclick="clearLocal('fav_list')">清空</span></div>
+        <div class="history-grid" id="favGrid"></div>
+    </div>
+    <div class="my-section" id="historySection">
+        <div class="section-header"><span>🕘 继续观看</span><span class="clear-btn" onclick="clearLocal('history_list')">清空</span></div>
+        <div class="history-grid" id="historyGrid"></div>
+    </div>
+
+    <div id="randomLoading">
+        <div class="spinner"></div>
+        <div style="color:white;font-size:14px">正在为您抽取...</div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            renderLocalList('fav_list', 'favGrid', 'favSection');
+            renderLocalList('history_list', 'historyGrid', 'historySection');
+            cleanupWeeklyHistory(); 
+        });
+
+        // === 智能推荐逻辑 ===
+        function guessAndDraw() {
+            // 1. 分析历史记录
+            var history = JSON.parse(localStorage.getItem('history_list') || '[]');
+            if (history.length === 0) {
+                luckyDraw('热门'); // 没记录就看热门
+                return;
+            }
+            
+            // 2. 统计最爱看的分类
+            var typeCounts = {};
+            history.forEach(h => {
+                // 如果历史记录里没存类型，默认为"热门"
+                var t = h.type || '热门';
+                typeCounts[t] = (typeCounts[t] || 0) + 1;
+            });
+            
+            // 找最大值
+            var favType = Object.keys(typeCounts).reduce((a, b) => typeCounts[a] > typeCounts[b] ? a : b);
+            
+            // 3. 播放该分类
+            // 如果计算出是"其他"或空，回滚到热门
+            if (!favType || favType === '其他') favType = '热门';
+            
+            // 提示用户
+            var loadingText = document.querySelector('#randomLoading div:last-child');
+            loadingText.innerText = `发现你常看 ${favType}，正在为您推荐...`;
+            
+            luckyDraw(favType);
+        }
+
+        function luckyDraw(tag) {
+            document.getElementById('randomLoading').style.display = 'flex';
+            var loadingText = document.querySelector('#randomLoading div:last-child');
+            if(loadingText.innerText.indexOf('常看') === -1) loadingText.innerText = "正在为您抽取...";
+
+            fetch('/api/random_pool?tag=' + encodeURIComponent(tag))
+                .then(res => res.json())
+                .then(pool => {
+                    if (!pool || pool.length === 0) {
+                        alert('暂无该类资源，试试别的？');
+                        document.getElementById('randomLoading').style.display = 'none';
+                        return;
+                    }
+
+                    // 过滤一周内已看
+                    var history = JSON.parse(localStorage.getItem('weekly_random_history') || '[]');
+                    var watchedIds = history.map(h => h.id);
+                    var candidates = pool.filter(item => !watchedIds.includes(item.id));
+
+                    if (candidates.length === 0) candidates = pool; 
+
+                    var luckyOne = candidates[Math.floor(Math.random() * candidates.length)];
+
+                    addToWeeklyHistory(luckyOne.id);
+                    // 保存类型到本地历史，方便"猜你喜欢"分析
+                    saveTypeToLocalHistory(luckyOne);
+                    
+                    window.location.href = `/play?id=${luckyOne.id}&api=${encodeURIComponent(luckyOne.api)}`;
+                })
+                .catch(e => {
+                    document.getElementById('randomLoading').style.display = 'none';
+                });
+        }
+
+        function saveTypeToLocalHistory(video) {
+            // 这个函数只是个辅助，真正的历史记录在播放页保存。
+            // 这里我们没法直接操作播放页的逻辑，但可以在跳转前临时存个标识
+            sessionStorage.setItem('current_video_type', video.type || '热门');
+        }
+
+        function addToWeeklyHistory(id) {
+            var history = JSON.parse(localStorage.getItem('weekly_random_history') || '[]');
+            history.push({ id: id, time: new Date().getTime() });
+            localStorage.setItem('weekly_random_history', JSON.stringify(history));
+        }
+
+        function cleanupWeeklyHistory() {
+            var history = JSON.parse(localStorage.getItem('weekly_random_history') || '[]');
+            var oneWeekAgo = new Date().getTime() - (7 * 24 * 60 * 60 * 1000);
+            var freshHistory = history.filter(h => h.time > oneWeekAgo);
+            localStorage.setItem('weekly_random_history', JSON.stringify(freshHistory));
+        }
+
+        function renderLocalList(key, gridId, sectionId) {
+            var grid = document.getElementById(gridId);
+            var listData = localStorage.getItem(key);
+            if (!listData || JSON.parse(listData).length === 0) {
+                document.getElementById(sectionId).style.display = 'none'; return;
+            }
+            document.getElementById(sectionId).style.display = 'block';
+            grid.innerHTML = '';
+            JSON.parse(listData).forEach(function(item) {
+                var html = `
+                <a href="/play?id=${item.id}&ep_index=${item.ep_index || 0}&api=${encodeURIComponent(item.api)}" class="v-card">
+                    <div class="v-img-box"><img src="${item.pic}" class="v-img" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.background='#333'"></div>
+                    <div class="v-title">${item.title}</div>
+                    <div class="v-note">${item.ep_name || '继续观看'}</div>
+                </a>`;
+                grid.insertAdjacentHTML('beforeend', html);
+            });
+        }
+        function clearLocal(key) { localStorage.removeItem(key); location.reload(); }
+    </script>
+</body>
+</html>

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="referrer" content="no-referrer">
+    <title>正在播放 - {{ video.title }}</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.0/dist/hls.min.js"></script>
+    <style>
+        /* 省略基础样式，保持原样 */
+        body { margin: 0; background: #000; color: #e0e0e0; font-family: -apple-system, sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        .navbar { height: 50px; padding: 0 15px; background: rgba(20, 20, 20, 0.9); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; z-index: 10; }
+        .logo { font-weight: 900; color: #fff; text-decoration: none; font-style: italic;}
+        .home-btn { color: #aaa; text-decoration: none; font-size: 14px; padding: 5px 10px; background: #333; border-radius: 15px; }
+        .main-container { display: flex; flex: 1; flex-direction: column; overflow: hidden; position: relative; }
+        @media (min-width: 800px) { .main-container { flex-direction: row; } }
+        .player-section { flex-shrink: 0; width: 100%; background: #000; display: flex; flex-direction: column; }
+        @media (min-width: 800px) { .player-section { flex: 3; height: 100%; justify-content: center; } }
+        .video-ratio-box { width: 100%; padding-top: 56.25%; position: relative; background: #000; }
+        @media (min-width: 800px) { .video-ratio-box { padding-top: 0; height: 100%; } }
+        .video-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        video, iframe { width: 100%; height: 100%; border: none; outline: none; }
+        .control-bar { height: 45px; background: #111; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; border-bottom: 1px solid #222; }
+        .control-btn { background: #333; color: #ccc; border: none; padding: 6px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; text-decoration: none; }
+        .sidebar { flex: 1; background: #111; display: flex; flex-direction: column; overflow: hidden; }
+        @media (min-width: 800px) { .sidebar { border-left: 1px solid #333; max-width: 350px; } }
+        .info-box { padding: 15px; border-bottom: 1px solid #222; }
+        .title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .title { font-size: 16px; color: white; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+        .action-btns { display: flex; gap: 8px; }
+        .act-btn { font-size: 12px; padding: 4px 10px; border-radius: 4px; border: 1px solid #444; color: #aaa; cursor: pointer; text-decoration: none; display: flex; align-items: center; }
+        .desc { font-size: 12px; color: #666; max-height: 40px; overflow-y: auto; }
+        .episodes-box { flex: 1; padding: 15px; overflow-y: auto; }
+        .ep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(55px, 1fr)); gap: 8px; }
+        .ep-btn { display: flex; align-items: center; justify-content: center; height: 34px; background: #222; color: #bbb; text-decoration: none; border-radius: 4px; font-size: 12px; }
+        .ep-btn.active { background: #ff3b30; color: white; }
+        .toast { position: absolute; top: 10%; left: 50%; transform: translateX(-50%); background: rgba(16, 185, 129, 0.9); color: white; padding: 8px 20px; border-radius: 30px; font-size: 13px; display: none; z-index: 99; pointer-events: none; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 100; display: none; justify-content: center; align-items: center; }
+        .modal-content { background: #1a1a1a; width: 80%; max-width: 400px; border-radius: 12px; padding: 20px; max-height: 60vh; overflow-y: auto; border: 1px solid #333; }
+        .modal-header { display: flex; justify-content: space-between; margin-bottom: 15px; font-weight: bold; color: white; }
+        .source-item { display: flex; justify-content: space-between; padding: 12px; border-bottom: 1px solid #333; cursor: pointer; color: #ccc; font-size: 14px; }
+        .source-item:hover { background: #333; color: white; }
+        .source-tag { font-size: 12px; color: #ff9f0a; border: 1px solid #ff9f0a; padding: 1px 4px; border-radius: 3px; margin-left: 10px; }
+        .loading-spinner { text-align: center; padding: 20px; color: #888; }
+        
+        .speed-tag { background: #28a745; color: white; font-size: 10px; padding: 1px 3px; border-radius: 2px; margin-right: 5px; }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <a href="/" class="logo">MY FLIX</a>
+        <a href="/" class="home-btn">🏠 首页</a>
+    </div>
+
+    <div class="main-container">
+        <div class="player-section">
+            <div id="resumeToast" class="toast">🚀 已为您恢复进度</div>
+            <div class="video-ratio-box"><div class="video-container" id="playerContainer"></div></div>
+            <div class="control-bar">
+                {% set prev_index = current_index - 1 %}
+                {% if prev_index >= 0 %}
+                <a href="/play?id={{ video.id }}&ep_index={{ prev_index }}&api={{ current_api }}" class="control-btn">⏮ 上一集</a>
+                {% else %}<span class="control-btn" style="opacity:0.3">⏮ 上一集</span>{% endif %}
+                <span style="font-size:12px;color:#666">{{ current_ep.name }}</span>
+                {% set next_index = current_index + 1 %}
+                {% if next_index < video.episodes|length %}
+                <a href="/play?id={{ video.id }}&ep_index={{ next_index }}&api={{ current_api }}" class="control-btn">下一集 ⏭</a>
+                {% else %}<span class="control-btn" style="opacity:0.3">下一集 ⏭</span>{% endif %}
+            </div>
+        </div>
+        <div class="sidebar">
+            <div class="info-box">
+                <div class="title-row">
+                    <div class="title">{{ video.title }}</div>
+                    <div class="action-btns">
+                        <span class="act-btn" id="favBtn" onclick="toggleFav()">🤍 收藏</span>
+                        <span class="act-btn" onclick="openSourceModal()">⚡ 换源</span>
+                    </div>
+                </div>
+                <div class="desc">{{ video.desc }}</div>
+            </div>
+            <div class="episodes-box">
+                <div class="ep-grid">
+                    {% for ep in video.episodes %}
+                    <a href="/play?id={{ video.id }}&ep_index={{ ep.index }}&api={{ current_api }}" class="ep-btn {% if ep.index == current_index %}active{% endif %}">{{ ep.name }}</a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="sourceModal" onclick="if(event.target===this)closeSourceModal()">
+        <div class="modal-content">
+            <div class="modal-header"><span>切换视频源</span><span onclick="closeSourceModal()" style="cursor:pointer">✕</span></div>
+            <div id="sourceList"></div>
+        </div>
+    </div>
+    
+    <script>
+        var videoSrc = "{{ current_ep.url }}"; 
+        var vodId = "{{ video.id }}";
+        var vodTitle = "{{ video.title }}";
+        var epIndex = "{{ current_index }}";
+        var currentApi = "{{ current_api }}";
+        var storageKey = "progress_" + vodId + "_" + epIndex;
+        // 记录当前类型，用于"猜你喜欢"
+        var currentType = "{{ video.type_name }}"; 
+        
+        var videoData = {
+            id: vodId,
+            title: vodTitle,
+            pic: "{{ video.pic }}",
+            api: currentApi,
+            ep_name: "{{ current_ep.name }}",
+            ep_index: epIndex,
+            type: currentType // 保存类型
+        };
+
+        function initPlayer() {
+            var container = document.getElementById('playerContainer');
+            if (videoSrc.indexOf('.m3u8') === -1 && videoSrc.indexOf('.mp4') === -1) {
+                container.innerHTML = `<iframe src="${videoSrc}" allow="autoplay; fullscreen" frameborder="0" style="width:100%;height:100%"></iframe>`;
+                saveHistory(); return;
+            }
+            var video = document.createElement('video');
+            video.id = 'videoPlayer'; video.controls = true; video.autoplay = true;
+            video.style.width = '100%'; video.style.height = '100%';
+            video.setAttribute('playsinline', ''); video.setAttribute('webkit-playsinline', '');
+            container.appendChild(video);
+
+            if (Hls.isSupported() && videoSrc.indexOf('.m3u8') > -1) {
+                var hls = new Hls(); hls.loadSource(videoSrc); hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, function() { loadProgress(video); });
+            } else {
+                video.src = videoSrc; video.addEventListener('loadedmetadata', function() { loadProgress(video); });
+            }
+            video.addEventListener('timeupdate', function() { if(video.currentTime>5) localStorage.setItem(storageKey, video.currentTime); });
+            saveHistory();
+        }
+
+        function loadProgress(video) {
+            var t = localStorage.getItem(storageKey);
+            if(t && parseFloat(t) > 5) { 
+                video.currentTime = parseFloat(t); 
+                var toast = document.getElementById('resumeToast'); toast.style.display='block';
+                setTimeout(()=>toast.style.display='none', 3000);
+            }
+            video.play().catch(e=>{});
+        }
+
+        function updateLocalList(key, item, isToggle) {
+            var list = JSON.parse(localStorage.getItem(key) || "[]");
+            var idx = list.findIndex(i => i.title === item.title);
+            var exists = idx > -1;
+            
+            if (isToggle) {
+                if (exists) { list.splice(idx, 1); } else { list.unshift(item); }
+            } else {
+                if (exists) list.splice(idx, 1);
+                list.unshift(item);
+            }
+            if (list.length > 50) list.pop();
+            localStorage.setItem(key, JSON.stringify(list));
+            return !exists;
+        }
+
+        function saveHistory() { updateLocalList('history_list', videoData); }
+
+        function toggleFav() {
+            var isFav = updateLocalList('fav_list', videoData, true);
+            updateFavBtn(isFav);
+        }
+
+        function updateFavBtn(isFav) {
+            var btn = document.getElementById('favBtn');
+            if(isFav === undefined) {
+                var list = JSON.parse(localStorage.getItem('fav_list') || "[]");
+                isFav = list.some(i => i.title === vodTitle);
+            }
+            btn.innerHTML = isFav ? '❤️ 已收藏' : '🤍 收藏';
+            btn.style.color = isFav ? '#ff3b30' : '#aaa';
+            btn.style.borderColor = isFav ? '#ff3b30' : '#444';
+        }
+
+        function openSourceModal() {
+            document.getElementById('sourceModal').style.display = 'flex';
+            var listDiv = document.getElementById('sourceList');
+            listDiv.innerHTML = '<div class="loading-spinner">正在搜索可用源...</div>';
+            
+            fetch('/api/search_json?keyword=' + encodeURIComponent(vodTitle))
+                .then(res => res.json())
+                .then(data => {
+                    listDiv.innerHTML = '';
+                    if (!data || data.length === 0) { listDiv.innerHTML = '<div class="loading-spinner">未找到其他源</div>'; return; }
+                    data.forEach(item => {
+                        var isCurrent = (item.api === currentApi);
+                        // 2. 换源页增加速度标识
+                        var speedHtml = '';
+                        if (item.speed && (item.speed.includes('极速') || item.speed.includes('高速'))) {
+                            speedHtml = `<span class="speed-tag">${item.speed}</span>`;
+                        }
+                        
+                        var html = `
+                        <div class="source-item" onclick="location.href='/play?id=${item.id}&api=${encodeURIComponent(item.api)}'">
+                            <span>${speedHtml}${item.title}</span>
+                            <span>
+                                ${isCurrent ? '<span style="color:#28a745;font-size:12px">当前源</span>' : ''}
+                                <span class="source-tag">${item.source_name || '未知'}</span>
+                            </span>
+                        </div>`;
+                        listDiv.insertAdjacentHTML('beforeend', html);
+                    });
+                });
+        }
+        function closeSourceModal() { document.getElementById('sourceModal').style.display = 'none'; }
+
+        initPlayer();
+        updateFavBtn();
+    </script>
+</body>
+</html>
